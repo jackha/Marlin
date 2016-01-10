@@ -117,7 +117,8 @@
     #error MESH_BED_LEVELING does not yet support DELTA printers.
   #endif
   #if ENABLED(AUTO_BED_LEVELING_FEATURE)
-    #error Select AUTO_BED_LEVELING_FEATURE or MESH_BED_LEVELING, not both.
+  // due to hacking, set both on. AUTO_BED_LEVELING_FEATURE does not work, only MESH
+//    #error Select AUTO_BED_LEVELING_FEATURE or MESH_BED_LEVELING, not both.
   #endif
   #if MESH_NUM_X_POINTS > 7 || MESH_NUM_Y_POINTS > 7
     #error MESH_NUM_X_POINTS and MESH_NUM_Y_POINTS need to be less than 8.

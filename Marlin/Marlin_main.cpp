@@ -29,7 +29,7 @@
 
 #include "Marlin.h"
 
-#if ENABLED(AUTO_BED_LEVELING_FEATURE)
+#if ENABLED(AUTO_BED_LEVELING_FEATURE) || ENABLED(MESH_BED_LEVELING)
   #include "vector_3.h"
   #if ENABLED(AUTO_BED_LEVELING_GRID)
     #include "qr_solve.h"
@@ -1193,7 +1193,7 @@ static void setup_for_endstop_move() {
   enable_endstops(true);
 }
 
-#if ENABLED(AUTO_BED_LEVELING_FEATURE)
+#if ENABLED(AUTO_BED_LEVELING_FEATURE) || ENABLED(MESH_BED_LEVELING)
 
   #if ENABLED(DELTA)
     /**
@@ -1212,7 +1212,7 @@ static void setup_for_endstop_move() {
     }
   #endif
 
-  #if ENABLED(AUTO_BED_LEVELING_GRID)
+  #if ENABLED(AUTO_BED_LEVELING_GRID) || ENABLED(MESH_BED_LEVELING)
 
     #if DISABLED(DELTA)
 
@@ -2240,7 +2240,7 @@ inline void gcode_G28() {
   st_synchronize();
 
   // For auto bed leveling, clear the level matrix
-  #if ENABLED(AUTO_BED_LEVELING_FEATURE)
+  #if ENABLED(AUTO_BED_LEVELING_FEATURE) || ENABLED(MESH_BED_LEVELING)
     plan_bed_level_matrix.set_to_identity();
     #if ENABLED(DELTA)
       reset_bed_level();
@@ -2599,7 +2599,7 @@ inline void gcode_G28() {
 
 #if ENABLED(MESH_BED_LEVELING)
 
-  enum MeshLevelingState { MeshReport, MeshStart, MeshNext, MeshSet };
+  enum MeshLevelingState { MeshReport, MeshStart, MeshNext, MeshSet, MeshJack };
 
   /**
    * G29: Mesh-based Z probe, probes a grid and produces a
@@ -2624,8 +2624,8 @@ inline void gcode_G28() {
 
     static int probe_point = -1;
     MeshLevelingState state = code_seen('S') ? (MeshLevelingState)code_value_short() : MeshReport;
-    if (state < 0 || state > 3) {
-      SERIAL_PROTOCOLLNPGM("S out of range (0-3).");
+    if (state < 0 || state > 4) {
+      SERIAL_PROTOCOLLNPGM("S out of range (0-4).");
       return;
     }
 
@@ -2654,13 +2654,16 @@ inline void gcode_G28() {
           SERIAL_PROTOCOLLNPGM("Mesh bed leveling not active.");
         break;
 
-      case MeshStart:
+      case MeshStart:  // G29 S1
         mbl.reset();
         probe_point = 0;
-        enqueuecommands_P(PSTR("G28\nG29 S2"));
+        // Jack: G28 X Y instead of G28 for Cyclone
+        enqueuecommands_P(PSTR("G28 X Y\nG29 S2"));
+        SERIAL_PROTOCOLLNPGM("go down manually and do G92 Z0 when finished.");
+          
         break;
 
-      case MeshNext:
+      case MeshNext:  // G29 S2
         if (probe_point < 0) {
           SERIAL_PROTOCOLLNPGM("Start mesh probing with \"G29 S1\" first.");
           return;
@@ -2696,11 +2699,12 @@ inline void gcode_G28() {
           SERIAL_PROTOCOLLNPGM("Mesh probing done.");
           probe_point = -1;
           mbl.active = 1;
-          enqueuecommands_P(PSTR("G28"));
+          // updated for cyclone
+          //enqueuecommands_P(PSTR("G1 Z10\nG28 X Y"));
         }
         break;
 
-      case MeshSet:
+      case MeshSet:  // G29 S3
         if (code_seen('X')) {
           ix = code_value_long() - 1;
           if (ix < 0 || ix >= MESH_NUM_X_POINTS) {
@@ -2731,10 +2735,20 @@ inline void gcode_G28() {
           return;
         }
         mbl.z_values[iy][ix] = z;
-
+        break;
+      case MeshJack:  // G29 S4
+        // enable and reset mbl
+        SERIAL_PROTOCOLPGM("Mesh Bed Level enabled; use G29 S3 Xx Yy Zz to fill with values.\n");
+        mbl.active = 1;
+        for (iy=0; iy<MESH_NUM_Y_POINTS; iy++) {
+          for (ix=0; ix<MESH_NUM_X_POINTS; ix++) {
+            mbl.z_values[iy][ix] = 0;            
+          }
+        }    
+        break;
     } // switch(state)
   }
-
+    
 #elif ENABLED(AUTO_BED_LEVELING_FEATURE)
 
   void out_of_range_error(const char* p_edge) {
@@ -2781,6 +2795,7 @@ inline void gcode_G28() {
    *     Usage: "G29 E" or "G29 e"
    *
    */
+   /*
   inline void gcode_G29() {
 
     #if ENABLED(DEBUG_LEVELING_FEATURE)
@@ -3220,13 +3235,17 @@ inline void gcode_G28() {
     #endif
 
   }
+*/
+#endif //AUTO_BED_LEVELING_FEATURE
 
+#if ENABLED(AUTO_BED_LEVELING_FEATURE) || ENABLED(MESH_BED_LEVELING)
   #if DISABLED(Z_PROBE_SLED)
 
     /**
      * G30: Do a single Z probe at the current XY
      */
     inline void gcode_G30() {
+      SERIAL_ECHOLNPGM("gcode_G30");
       #if HAS_SERVO_ENDSTOPS
         raise_z_for_servo();
       #endif
@@ -3256,8 +3275,8 @@ inline void gcode_G28() {
     }
 
   #endif //!Z_PROBE_SLED
+#endif //AUTO_BED_LEVELING_FEATURE / MESH_BED_LEVELING
 
-#endif //AUTO_BED_LEVELING_FEATURE
 
 /**
  * G92: Set current position to given X Y Z E
